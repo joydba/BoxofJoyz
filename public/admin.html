@@ -35,6 +35,11 @@
         <label for="dprice">Price ($)</label>
         <input id="dprice" type="number" step="0.01" required>
       </div>
+      <div>
+        <label for="dimage">Image URL (optional)</label>
+        <input id="dimage" type="url" placeholder="https://...">
+        <p class="hint" style="margin-top:6px;">Upload your photo to a free host like <a href="https://imgur.com/upload" target="_blank" style="color:var(--brass);">imgur.com/upload</a>, then paste the direct image link here.</p>
+      </div>
       <button type="submit">Add dish</button>
     </form>
   </div>
@@ -75,10 +80,11 @@ document.getElementById('dish-form').addEventListener('submit', async (e) => {
   const name = document.getElementById('dname').value;
   const description = document.getElementById('ddesc').value;
   const price = document.getElementById('dprice').value;
+  const image_url = document.getElementById('dimage').value;
   const res = await fetch('/api/admin/dishes', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, description, price })
+    body: JSON.stringify({ name, description, price, image_url })
   });
   const data = await res.json();
   const msgArea = document.getElementById('msg-area');
