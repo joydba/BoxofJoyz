@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The JoyBox</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600&family=Work+Sans:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand"><span class="accent">The</span> JoyBox</div>
+  <nav class="top" id="nav"></nav>
+</header>
+
+<main>
+  <p class="eyebrow" id="date-label">Loading today's date…</p>
+  <h1 class="headline">Two dishes.<br>Made properly.</h1>
+  <p class="sub">No sprawling menu, no guesswork. Every day we cook exactly two dishes, in limited number, and stop when they're gone.</p>
+
+  <div id="msg-area"></div>
+  <div class="ticket-board" id="board">
+    <p class="hint">Loading today's menu…</p>
+  </div>
+</main>
+
+<footer class="note" id="orders-link"></footer>
+
+<script>
+let me = null;
+
+async function loadMe() {
+  const res = await fetch('/api/me');
+  const data = await res.json();
+  me = data.user;
+  renderNav();
+}
+
+function renderNav() {
+  const nav = document.getElementById('nav');
+  const ordersLink = document.getElementById('orders-link');
+  if (me) {
+    nav.innerHTML = `
+      <a href="/my-orders.html">My Orders</a>
+      ${me.isAdmin ? '<a href="/admin.html">Admin</a>' : ''}
+      <a href="#" id="logout-link">Log out</a>
+    `;
+    document.getElementById('logout-link').addEventListener('click', async (e) => {
+      e.preventDefault();
+      await fetch('/api/logout', { method: 'POST' });
+      location.reload();
+    });
+    ordersLink.innerHTML = '';
+  } else {
+    nav.innerHTML = `<a href="/login.html">Log in</a><a href="/signup.html">Sign up</a>`;
+  }
+}
+
+async function loadMenu() {
+  const res = await fetch('/api/menu/today');
+  const data = await res.json();
+  const board = document.getElementById('board');
+  const dateLabel = document.getElementById('date-label');
+  dateLabel.textContent = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+
+  if (!data.menu || data.menu.length === 0) {
+    board.innerHTML = '<p class="hint">Nothing posted yet today — check back soon.</p>';
+    return;
+  }
+
+  board.innerHTML = data.menu.map((item, i) => {
+    const remaining = item.remaining;
+    let cls = 'plenty', label = `${remaining} left`;
+    if (remaining <= 0) { cls = 'out'; label = 'Sold out'; }
+    else if (remaining <= 2) { cls = 'low'; label = `Only ${remaining} left`; }
+
+    return `
+      <div class="ticket">
+        ${item.image_url ? `<img class="dish-img" src="${escapeHtml(item.image_url)}" alt="${escapeHtml(item.name)}">` : ''}
+        <span class="slot-no">Slot ${i + 1}</span>
+        <h2>${escapeHtml(item.name)}</h2>
+        <p class="desc">${escapeHtml(item.description || '')}</p>
+        <div class="meta-row">
+          <span class="price">₹${Number(item.price).toFixed(2)}</span>
+          <span class="remaining ${cls}">${label}</span>
+        </div>
+        <button ${remaining <= 0 ? 'disabled' : ''} data-id="${item.daily_menu_id}">
+          ${remaining <= 0 ? 'Sold out' : 'Order this'}
+        </button>
+      </div>
+    `;
+  }).join('');
+
+  board.querySelectorAll('button[data-id]').forEach(btn => {
+    btn.addEventListener('click', () => placeOrder(btn.dataset.id, btn));
+  });
+}
+
+async function placeOrder(dailyMenuId, btn) {
+  if (!me) {
+    location.href = '/login.html';
+    return;
+  }
+  btn.disabled = true;
+  btn.textContent = 'Placing order…';
+  const res = await fetch('/api/orders', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ daily_menu_id: Number(dailyMenuId), quantity: 1 })
+  });
+  const data = await res.json();
+  const msgArea = document.getElementById('msg-area');
+  if (res.ok) {
+    msgArea.innerHTML = `<div class="msg ok">Order placed. See you soon.</div>`;
+  } else {
+    msgArea.innerHTML = `<div class="msg error">${escapeHtml(data.error || 'Order failed')}</div>`;
+  }
+  loadMenu();
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+loadMe().then(loadMenu);
+</script>
+</body>
+</html>
