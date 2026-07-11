@@ -1,0 +1,19 @@
+{
+  "name": "the-joybox",
+  "version": "1.0.0",
+  "description": "Small daily food-delivery site: 2 dishes a day, order until sold out.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-session": "^1.18.0",
+    "pg": "^8.12.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

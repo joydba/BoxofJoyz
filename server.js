@@ -1,0 +1,205 @@
+require('dotenv').config();
+const express = require('express');
+const session = require('express-session');
+const bcrypt = require('bcryptjs');
+const path = require('path');
+const pool = require('./db');
+
+const app = express();
+app.use(express.json());
+app.use(express.static(path.join(__dirname, 'public')));
+
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'change-me-in-production',
+  resave: false,
+  saveUninitialized: false,
+  cookie: { maxAge: 1000 * 60 * 60 * 24 * 7 } // 1 week
+}));
+
+function requireLogin(req, res, next) {
+  if (!req.session.userId) return res.status(401).json({ error: 'Please log in' });
+  next();
+}
+
+function requireAdmin(req, res, next) {
+  if (!req.session.isAdmin) return res.status(403).json({ error: 'Admin only' });
+  next();
+}
+
+// ---------- AUTH ----------
+
+app.post('/api/signup', async (req, res) => {
+  try {
+    const { name, email, password } = req.body;
+    if (!name || !email || !password) return res.status(400).json({ error: 'Missing fields' });
+
+    const hash = await bcrypt.hash(password, 10);
+    const result = await pool.query(
+      'INSERT INTO users (name, email, password_hash) VALUES ($1, $2, $3) RETURNING id, name, email, is_admin',
+      [name, email, hash]
+    );
+    const user = result.rows[0];
+    req.session.userId = user.id;
+    req.session.isAdmin = user.is_admin;
+    res.json({ user });
+  } catch (err) {
+    if (err.code === '23505') return res.status(409).json({ error: 'Email already registered' });
+    console.error(err);
+    res.status(500).json({ error: 'Signup failed' });
+  }
+});
+
+app.post('/api/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    const result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+    const user = result.rows[0];
+    if (!user) return res.status(401).json({ error: 'Invalid email or password' });
+
+    const ok = await bcrypt.compare(password, user.password_hash);
+    if (!ok) return res.status(401).json({ error: 'Invalid email or password' });
+
+    req.session.userId = user.id;
+    req.session.isAdmin = user.is_admin;
+    res.json({ user: { id: user.id, name: user.name, email: user.email, is_admin: user.is_admin } });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Login failed' });
+  }
+});
+
+app.post('/api/logout', (req, res) => {
+  req.session.destroy(() => res.json({ ok: true }));
+});
+
+app.get('/api/me', (req, res) => {
+  if (!req.session.userId) return res.json({ user: null });
+  res.json({ user: { id: req.session.userId, isAdmin: req.session.isAdmin } });
+});
+
+// ---------- MENU (public) ----------
+
+app.get('/api/menu/today', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT dm.id AS daily_menu_id, d.name, d.description, d.price, d.image_url,
+              dm.quantity_available, dm.quantity_sold,
+              (dm.quantity_available - dm.quantity_sold) AS remaining
+       FROM daily_menu dm
+       JOIN dishes d ON d.id = dm.dish_id
+       WHERE dm.menu_date = CURRENT_DATE
+       ORDER BY dm.id`
+    );
+    res.json({ menu: result.rows });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Could not load menu' });
+  }
+});
+
+// ---------- ORDERS ----------
+
+app.post('/api/orders', requireLogin, async (req, res) => {
+  const { daily_menu_id, quantity = 1 } = req.body;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Atomic: only succeeds if enough stock remains. Prevents overselling
+    // even if two people order the last dish at the same moment.
+    const update = await client.query(
+      `UPDATE daily_menu
+       SET quantity_sold = quantity_sold + $1
+       WHERE id = $2 AND menu_date = CURRENT_DATE
+         AND quantity_sold + $1 <= quantity_available
+       RETURNING id`,
+      [quantity, daily_menu_id]
+    );
+
+    if (update.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ error: 'Sold out or invalid item' });
+    }
+
+    const order = await client.query(
+      `INSERT INTO orders (user_id, daily_menu_id, quantity)
+       VALUES ($1, $2, $3) RETURNING id, created_at`,
+      [req.session.userId, daily_menu_id, quantity]
+    );
+
+    await client.query('COMMIT');
+    res.json({ order: order.rows[0] });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error(err);
+    res.status(500).json({ error: 'Order failed' });
+  } finally {
+    client.release();
+  }
+});
+
+app.get('/api/orders/mine', requireLogin, async (req, res) => {
+  const result = await pool.query(
+    `SELECT o.id, o.quantity, o.status, o.created_at, d.name, dm.menu_date
+     FROM orders o
+     JOIN daily_menu dm ON dm.id = o.daily_menu_id
+     JOIN dishes d ON d.id = dm.dish_id
+     WHERE o.user_id = $1
+     ORDER BY o.created_at DESC`,
+    [req.session.userId]
+  );
+  res.json({ orders: result.rows });
+});
+
+// ---------- ADMIN ----------
+
+// Create a dish in the catalog (do this once per dish, reuse across days)
+app.post('/api/admin/dishes', requireLogin, requireAdmin, async (req, res) => {
+  const { name, description, price, image_url } = req.body;
+  const result = await pool.query(
+    `INSERT INTO dishes (name, description, price, image_url) VALUES ($1,$2,$3,$4) RETURNING *`,
+    [name, description, price, image_url]
+  );
+  res.json({ dish: result.rows[0] });
+});
+
+app.get('/api/admin/dishes', requireLogin, requireAdmin, async (req, res) => {
+  const result = await pool.query('SELECT * FROM dishes ORDER BY name');
+  res.json({ dishes: result.rows });
+});
+
+// Set today's menu: max 2 dishes enforced here
+app.post('/api/admin/menu/today', requireLogin, requireAdmin, async (req, res) => {
+  const { dish_id, quantity_available } = req.body;
+  try {
+    const countResult = await pool.query(
+      `SELECT COUNT(*) FROM daily_menu WHERE menu_date = CURRENT_DATE`
+    );
+    const existingCount = parseInt(countResult.rows[0].count, 10);
+
+    const already = await pool.query(
+      `SELECT id FROM daily_menu WHERE menu_date = CURRENT_DATE AND dish_id = $1`,
+      [dish_id]
+    );
+
+    if (already.rows.length === 0 && existingCount >= 2) {
+      return res.status(400).json({ error: 'Only 2 dishes allowed per day' });
+    }
+
+    const result = await pool.query(
+      `INSERT INTO daily_menu (menu_date, dish_id, quantity_available)
+       VALUES (CURRENT_DATE, $1, $2)
+       ON CONFLICT (menu_date, dish_id)
+       DO UPDATE SET quantity_available = EXCLUDED.quantity_available
+       RETURNING *`,
+      [dish_id, quantity_available]
+    );
+    res.json({ menuItem: result.rows[0] });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Could not update menu' });
+  }
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
