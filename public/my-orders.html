@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Orders — The JoyBox</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600&family=Work+Sans:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand"><a href="/" style="color:inherit;text-decoration:none;"><span class="accent">The</span> JoyBox</a></div>
+  <nav class="top" id="nav"></nav>
+</header>
+<main>
+  <p class="eyebrow">History</p>
+  <h1 class="headline">My orders</h1>
+  <ul class="order-list" id="order-list"></ul>
+</main>
+<script>
+async function loadMe() {
+  const res = await fetch('/api/me');
+  const data = await res.json();
+  if (!data.user) { location.href = '/login.html'; return; }
+  document.getElementById('nav').innerHTML = `
+    <a href="/">Menu</a>
+    ${data.user.isAdmin ? '<a href="/admin.html">Admin</a>' : ''}
+    <a href="#" id="logout-link">Log out</a>
+  `;
+  document.getElementById('logout-link').addEventListener('click', async (e) => {
+    e.preventDefault();
+    await fetch('/api/logout', { method: 'POST' });
+    location.href = '/';
+  });
+}
+
+async function loadOrders() {
+  const res = await fetch('/api/orders/mine');
+  const data = await res.json();
+  const list = document.getElementById('order-list');
+  if (!data.orders || data.orders.length === 0) {
+    list.innerHTML = '<p class="hint">No orders yet.</p>';
+    return;
+  }
+  list.innerHTML = data.orders.map(o => `
+    <li>
+      <span>${escapeHtml(o.name)} × ${o.quantity}</span>
+      <span class="date">${new Date(o.menu_date).toLocaleDateString()}</span>
+    </li>
+  `).join('');
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+loadMe().then(loadOrders);
+</script>
+</body>
+</html>

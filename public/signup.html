@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sign up — The JoyBox</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600&family=Work+Sans:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand"><a href="/" style="color:inherit;text-decoration:none;"><span class="accent">The</span> JoyBox</a></div>
+  <nav class="top"><a href="/login.html">Log in</a></nav>
+</header>
+<main>
+  <p class="eyebrow">Get started</p>
+  <h1 class="headline">Create your account</h1>
+  <div id="msg-area"></div>
+  <form id="signup-form">
+    <div>
+      <label for="name">Name</label>
+      <input id="name" type="text" required>
+    </div>
+    <div>
+      <label for="email">Email</label>
+      <input id="email" type="email" required>
+    </div>
+    <div>
+      <label for="password">Password</label>
+      <input id="password" type="password" required minlength="8">
+    </div>
+    <button type="submit" class="primary">Sign up</button>
+  </form>
+</main>
+<script>
+document.getElementById('signup-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const name = document.getElementById('name').value;
+  const email = document.getElementById('email').value;
+  const password = document.getElementById('password').value;
+  const res = await fetch('/api/signup', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, email, password })
+  });
+  const data = await res.json();
+  const msgArea = document.getElementById('msg-area');
+  if (res.ok) {
+    location.href = '/';
+  } else {
+    msgArea.innerHTML = `<div class="msg error">${data.error}</div>`;
+  }
+});
+</script>
+</body>
+</html>
