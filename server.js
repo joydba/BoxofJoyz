@@ -4,6 +4,7 @@ const session = require('express-session');
 const bcrypt = require('bcryptjs');
 const path = require('path');
 const pool = require('./db');
+const { notifyAdminWhatsApp } = require('./notify');
 
 const app = express();
 app.use(express.json());
@@ -30,17 +31,22 @@ function requireAdmin(req, res, next) {
 
 app.post('/api/signup', async (req, res) => {
   try {
-    const { name, email, password } = req.body;
+    const { name, email, phone, password } = req.body;
     if (!name || !email || !password) return res.status(400).json({ error: 'Missing fields' });
 
     const hash = await bcrypt.hash(password, 10);
     const result = await pool.query(
-      'INSERT INTO users (name, email, password_hash) VALUES ($1, $2, $3) RETURNING id, name, email, is_admin',
-      [name, email, hash]
+      'INSERT INTO users (name, email, phone, password_hash) VALUES ($1, $2, $3, $4) RETURNING id, name, email, is_admin',
+      [name, email, phone || null, hash]
     );
     const user = result.rows[0];
     req.session.userId = user.id;
     req.session.isAdmin = user.is_admin;
+
+    notifyAdminWhatsApp(
+      `New JoyBox signup: ${name} (${email})${phone ? ', ' + phone : ''}`
+    ); // fire-and-forget, doesn't block the response
+
     res.json({ user });
   } catch (err) {
     if (err.code === '23505') return res.status(409).json({ error: 'Email already registered' });
@@ -177,7 +183,7 @@ app.get('/api/admin/dishes', requireLogin, requireAdmin, async (req, res) => {
 // See how many users have signed up, and their order counts
 app.get('/api/admin/users', requireLogin, requireAdmin, async (req, res) => {
   const result = await pool.query(
-    `SELECT u.id, u.name, u.email, u.is_admin, u.created_at,
+    `SELECT u.id, u.name, u.email, u.phone, u.is_admin, u.created_at,
             COUNT(o.id) AS order_count,
             COALESCE(SUM(o.quantity), 0) AS total_items_ordered
      FROM users u
