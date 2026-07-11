@@ -110,6 +110,18 @@ p.sub {
   border: 1px solid var(--line);
 }
 
+.dish-img.img-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--ink);
+  border: 1px dashed var(--line);
+  color: var(--parchment-dim);
+  font-size: 13px;
+  text-align: center;
+  padding: 12px;
+}
+
 .ticket .slot-no {
   font-family: 'Fraunces', Georgia, serif;
   font-size: 13px;

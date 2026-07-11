@@ -102,6 +102,15 @@ async function loadMenu() {
     btn.addEventListener('click', () => addItemToCart(btn.dataset.id, Number(btn.dataset.max), btn));
   });
 
+  board.querySelectorAll('.dish-img').forEach(img => {
+    img.addEventListener('error', () => {
+      const fallback = document.createElement('div');
+      fallback.className = 'dish-img img-fallback';
+      fallback.textContent = 'Image unavailable';
+      img.replaceWith(fallback);
+    }, { once: true });
+  });
+
   updateCartBadge();
 }
 

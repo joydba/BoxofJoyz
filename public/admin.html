@@ -65,7 +65,7 @@ async function loadMe() {
   const res = await fetch('/api/me');
   const data = await res.json();
   if (!data.user || !data.user.isAdmin) { location.href = '/'; return; }
-  document.getElementById('nav').innerHTML = `<a href="/">Menu</a>`;
+  document.getElementById('nav').innerHTML = `<a href="/">Menu</a><a href="/admin-users.html">Users & Activity</a>`;
 }
 
 async function loadDishes() {

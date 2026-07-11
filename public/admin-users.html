@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Users & Activity — The JoyBox</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600&family=Work+Sans:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<style>
+  table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); font-size: 14px; }
+  th { color: var(--brass); text-transform: uppercase; letter-spacing: 0.04em; font-size: 12px; font-weight: 500; }
+  .badge-admin { color: var(--brass); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .activity-type { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; padding: 2px 8px; border-radius: 999px; }
+  .activity-type.signup { color: var(--brass); border: 1px solid var(--brass-dim); }
+  .activity-type.order { color: var(--parchment); border: 1px solid var(--line); }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand"><a href="/" style="color:inherit;text-decoration:none;"><span class="accent">The</span> JoyBox</a></div>
+  <nav class="top" id="nav"></nav>
+</header>
+<main style="max-width:920px;">
+  <p class="eyebrow">Kitchen</p>
+  <h1 class="headline">Users &amp; activity</h1>
+  <p class="sub" id="summary-line">Loading…</p>
+
+  <h3 class="display">Registered users</h3>
+  <table id="users-table">
+    <thead>
+      <tr><th>Name</th><th>Email</th><th>Joined</th><th>Orders placed</th><th>Items ordered</th><th></th></tr>
+    </thead>
+    <tbody id="users-body"></tbody>
+  </table>
+
+  <h3 class="display" style="margin-top:40px;">Recent activity</h3>
+  <table id="activity-table">
+    <thead>
+      <tr><th>Type</th><th>User</th><th>Detail</th><th>When</th></tr>
+    </thead>
+    <tbody id="activity-body"></tbody>
+  </table>
+</main>
+<script>
+async function loadMe() {
+  const res = await fetch('/api/me');
+  const data = await res.json();
+  if (!data.user || !data.user.isAdmin) { location.href = '/'; return false; }
+  document.getElementById('nav').innerHTML = `<a href="/">Menu</a><a href="/admin.html">Set Menu</a>`;
+  return true;
+}
+
+async function loadUsers() {
+  const res = await fetch('/api/admin/users');
+  const data = await res.json();
+  const body = document.getElementById('users-body');
+  document.getElementById('summary-line').textContent = `${data.users.length} registered user${data.users.length === 1 ? '' : 's'}`;
+
+  body.innerHTML = data.users.map(u => `
+    <tr>
+      <td>${escapeHtml(u.name)}</td>
+      <td>${escapeHtml(u.email)}</td>
+      <td>${new Date(u.created_at).toLocaleDateString()}</td>
+      <td>${u.order_count}</td>
+      <td>${u.total_items_ordered}</td>
+      <td>${u.is_admin ? '<span class="badge-admin">Admin</span>' : ''}</td>
+    </tr>
+  `).join('');
+}
+
+async function loadActivity() {
+  const res = await fetch('/api/admin/activity');
+  const data = await res.json();
+  const body = document.getElementById('activity-body');
+
+  if (!data.activity || data.activity.length === 0) {
+    body.innerHTML = '<tr><td colspan="4" class="hint">No activity yet.</td></tr>';
+    return;
+  }
+
+  body.innerHTML = data.activity.map(a => `
+    <tr>
+      <td><span class="activity-type ${a.type}">${a.type === 'signup' ? 'Signed up' : 'Order'}</span></td>
+      <td>${escapeHtml(a.user_name)}<br><span class="hint" style="font-size:12px;">${escapeHtml(a.user_email)}</span></td>
+      <td>${a.detail ? escapeHtml(a.detail) : '—'}</td>
+      <td>${new Date(a.created_at).toLocaleString()}</td>
+    </tr>
+  `).join('');
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+(async () => {
+  const ok = await loadMe();
+  if (!ok) return;
+  loadUsers();
+  loadActivity();
+})();
+</script>
+</body>
+</html>
