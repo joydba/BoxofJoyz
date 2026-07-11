@@ -27,6 +27,10 @@
       <input id="email" type="email" required>
     </div>
     <div>
+      <label for="phone">Phone number</label>
+      <input id="phone" type="tel" required placeholder="For order and menu updates via WhatsApp/SMS">
+    </div>
+    <div>
       <label for="password">Password</label>
       <input id="password" type="password" required minlength="8">
     </div>
@@ -38,11 +42,12 @@ document.getElementById('signup-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const name = document.getElementById('name').value;
   const email = document.getElementById('email').value;
+  const phone = document.getElementById('phone').value;
   const password = document.getElementById('password').value;
   const res = await fetch('/api/signup', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, email, password })
+    body: JSON.stringify({ name, email, phone, password })
   });
   const data = await res.json();
   const msgArea = document.getElementById('msg-area');
