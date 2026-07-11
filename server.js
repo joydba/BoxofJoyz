@@ -100,7 +100,12 @@ app.get('/api/menu/today', async (req, res) => {
 // ---------- ORDERS ----------
 
 app.post('/api/orders', requireLogin, async (req, res) => {
-  const { daily_menu_id, quantity = 1 } = req.body;
+  const { daily_menu_id, quantity = 1, delivery_address, phone, payment_method = 'cod' } = req.body;
+
+  if (!delivery_address || !phone) {
+    return res.status(400).json({ error: 'Delivery address and phone are required' });
+  }
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -122,9 +127,9 @@ app.post('/api/orders', requireLogin, async (req, res) => {
     }
 
     const order = await client.query(
-      `INSERT INTO orders (user_id, daily_menu_id, quantity)
-       VALUES ($1, $2, $3) RETURNING id, created_at`,
-      [req.session.userId, daily_menu_id, quantity]
+      `INSERT INTO orders (user_id, daily_menu_id, quantity, delivery_address, phone, payment_method)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, created_at`,
+      [req.session.userId, daily_menu_id, quantity, delivery_address, phone, payment_method]
     );
 
     await client.query('COMMIT');
@@ -140,7 +145,8 @@ app.post('/api/orders', requireLogin, async (req, res) => {
 
 app.get('/api/orders/mine', requireLogin, async (req, res) => {
   const result = await pool.query(
-    `SELECT o.id, o.quantity, o.status, o.created_at, d.name, dm.menu_date
+    `SELECT o.id, o.quantity, o.status, o.created_at, o.payment_method, o.delivery_address, o.phone,
+            d.name, dm.menu_date, (d.price * o.quantity) AS total
      FROM orders o
      JOIN daily_menu dm ON dm.id = o.daily_menu_id
      JOIN dishes d ON d.id = dm.dish_id
