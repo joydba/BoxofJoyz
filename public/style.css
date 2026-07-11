@@ -122,6 +122,42 @@ p.sub {
   padding: 12px;
 }
 
+.ticket .dish-img:not(.img-fallback) { cursor: zoom-in; }
+
+.lightbox-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 15, 12, 0.92);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+  padding: 32px;
+  cursor: zoom-out;
+}
+
+.lightbox-overlay img {
+  max-width: min(90vw, 720px);
+  max-height: 85vh;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+
+.lightbox-close {
+  position: absolute;
+  top: 24px;
+  right: 28px;
+  color: var(--parchment);
+  font-size: 28px;
+  line-height: 1;
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 4px 10px;
+}
+.lightbox-close:hover { color: var(--brass); }
+
 .ticket .slot-no {
   font-family: 'Fraunces', Georgia, serif;
   font-size: 13px;
