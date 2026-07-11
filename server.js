@@ -174,6 +174,40 @@ app.get('/api/admin/dishes', requireLogin, requireAdmin, async (req, res) => {
   res.json({ dishes: result.rows });
 });
 
+// See how many users have signed up, and their order counts
+app.get('/api/admin/users', requireLogin, requireAdmin, async (req, res) => {
+  const result = await pool.query(
+    `SELECT u.id, u.name, u.email, u.is_admin, u.created_at,
+            COUNT(o.id) AS order_count,
+            COALESCE(SUM(o.quantity), 0) AS total_items_ordered
+     FROM users u
+     LEFT JOIN orders o ON o.user_id = u.id
+     GROUP BY u.id
+     ORDER BY u.created_at DESC`
+  );
+  res.json({ users: result.rows });
+});
+
+// Combined activity feed: signups and orders, most recent first
+app.get('/api/admin/activity', requireLogin, requireAdmin, async (req, res) => {
+  const result = await pool.query(
+    `SELECT 'signup' AS type, u.name AS user_name, u.email AS user_email,
+            NULL AS detail, u.created_at
+     FROM users u
+     UNION ALL
+     SELECT 'order' AS type, u.name AS user_name, u.email AS user_email,
+            d.name || ' × ' || o.quantity || ' (₹' || (d.price * o.quantity) || ', ' || o.payment_method || ')' AS detail,
+            o.created_at
+     FROM orders o
+     JOIN users u ON u.id = o.user_id
+     JOIN daily_menu dm ON dm.id = o.daily_menu_id
+     JOIN dishes d ON d.id = dm.dish_id
+     ORDER BY created_at DESC
+     LIMIT 200`
+  );
+  res.json({ activity: result.rows });
+});
+
 // Set today's menu: max 2 dishes enforced here
 app.post('/api/admin/menu/today', requireLogin, requireAdmin, async (req, res) => {
   const { dish_id, quantity_available } = req.body;
