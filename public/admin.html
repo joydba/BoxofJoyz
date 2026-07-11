@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin — The JoyBox</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600&family=Work+Sans:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand"><a href="/" style="color:inherit;text-decoration:none;"><span class="accent">The</span> JoyBox</a></div>
+  <nav class="top" id="nav"></nav>
+</header>
+<main>
+  <p class="eyebrow">Kitchen</p>
+  <h1 class="headline">Set today's menu</h1>
+  <p class="sub">Add up to two dishes for today. Pick a dish already in your catalog, or add a new one first.</p>
+
+  <div id="msg-area"></div>
+
+  <div class="admin-form">
+    <h3 class="display" style="margin-top:0;">Add a new dish to the catalog</h3>
+    <form id="dish-form">
+      <div>
+        <label for="dname">Name</label>
+        <input id="dname" required>
+      </div>
+      <div>
+        <label for="ddesc">Description</label>
+        <input id="ddesc">
+      </div>
+      <div>
+        <label for="dprice">Price ($)</label>
+        <input id="dprice" type="number" step="0.01" required>
+      </div>
+      <button type="submit">Add dish</button>
+    </form>
+  </div>
+
+  <div class="admin-form">
+    <h3 class="display" style="margin-top:0;">Put a dish on today's menu</h3>
+    <form id="menu-form">
+      <div>
+        <label for="dish-select">Dish</label>
+        <select id="dish-select" style="width:100%;background:var(--ink);color:var(--parchment);border:1px solid var(--line);border-radius:3px;padding:12px;"></select>
+      </div>
+      <div>
+        <label for="qty">Quantity available today</label>
+        <input id="qty" type="number" min="1" value="10" required>
+      </div>
+      <button type="submit" class="primary">Post to today's menu</button>
+    </form>
+    <p class="hint">Only 2 dishes can be posted per day — adding a 3rd will be rejected.</p>
+  </div>
+</main>
+<script>
+async function loadMe() {
+  const res = await fetch('/api/me');
+  const data = await res.json();
+  if (!data.user || !data.user.isAdmin) { location.href = '/'; return; }
+  document.getElementById('nav').innerHTML = `<a href="/">Menu</a>`;
+}
+
+async function loadDishes() {
+  const res = await fetch('/api/admin/dishes');
+  const data = await res.json();
+  const select = document.getElementById('dish-select');
+  select.innerHTML = (data.dishes || []).map(d => `<option value="${d.id}">${escapeHtml(d.name)}</option>`).join('');
+}
+
+document.getElementById('dish-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const name = document.getElementById('dname').value;
+  const description = document.getElementById('ddesc').value;
+  const price = document.getElementById('dprice').value;
+  const res = await fetch('/api/admin/dishes', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, description, price })
+  });
+  const data = await res.json();
+  const msgArea = document.getElementById('msg-area');
+  if (res.ok) {
+    msgArea.innerHTML = `<div class="msg ok">Dish added to catalog.</div>`;
+    document.getElementById('dish-form').reset();
+    loadDishes();
+  } else {
+    msgArea.innerHTML = `<div class="msg error">${data.error}</div>`;
+  }
+});
+
+document.getElementById('menu-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const dish_id = Number(document.getElementById('dish-select').value);
+  const quantity_available = Number(document.getElementById('qty').value);
+  const res = await fetch('/api/admin/menu/today', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ dish_id, quantity_available })
+  });
+  const data = await res.json();
+  const msgArea = document.getElementById('msg-area');
+  if (res.ok) {
+    msgArea.innerHTML = `<div class="msg ok">Posted to today's menu.</div>`;
+  } else {
+    msgArea.innerHTML = `<div class="msg error">${data.error}</div>`;
+  }
+});
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+loadMe().then(loadDishes);
+</script>
+</body>
+</html>
