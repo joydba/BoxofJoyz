@@ -45,8 +45,11 @@ async function loadOrders() {
   }
   list.innerHTML = data.orders.map(o => `
     <li>
-      <span>${escapeHtml(o.name)} × ${o.quantity}</span>
-      <span class="date">${new Date(o.menu_date).toLocaleDateString()}</span>
+      <span>
+        ${escapeHtml(o.name)} × ${o.quantity}
+        <span class="checkout-meta">${new Date(o.menu_date).toLocaleDateString()} · Cash on Delivery · ${escapeHtml(o.delivery_address || '')}</span>
+      </span>
+      <span class="date">₹${Number(o.total).toFixed(2)}</span>
     </li>
   `).join('');
 }

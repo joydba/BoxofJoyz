@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600&family=Work+Sans:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
+<script src="cart.js"></script>
 </head>
 <body>
 <header class="top">
@@ -42,6 +43,7 @@ function renderNav() {
   const ordersLink = document.getElementById('orders-link');
   if (me) {
     nav.innerHTML = `
+      <a href="/checkout.html">Cart<span class="cart-badge" id="cart-badge" style="display:none;"></span></a>
       <a href="/my-orders.html">My Orders</a>
       ${me.isAdmin ? '<a href="/admin.html">Admin</a>' : ''}
       <a href="#" id="logout-link">Log out</a>
@@ -52,6 +54,7 @@ function renderNav() {
       location.reload();
     });
     ordersLink.innerHTML = '';
+    updateCartBadge();
   } else {
     nav.innerHTML = `<a href="/login.html">Log in</a><a href="/signup.html">Sign up</a>`;
   }
@@ -85,38 +88,37 @@ async function loadMenu() {
           <span class="price">₹${Number(item.price).toFixed(2)}</span>
           <span class="remaining ${cls}">${label}</span>
         </div>
-        <button ${remaining <= 0 ? 'disabled' : ''} data-id="${item.daily_menu_id}">
-          ${remaining <= 0 ? 'Sold out' : 'Order this'}
-        </button>
+        <div class="qty-row">
+          <input type="number" min="1" max="${remaining}" value="1" data-qty-for="${item.daily_menu_id}" ${remaining <= 0 ? 'disabled' : ''}>
+          <button ${remaining <= 0 ? 'disabled' : ''} data-id="${item.daily_menu_id}" data-max="${remaining}">
+            ${remaining <= 0 ? 'Sold out' : 'Add to cart'}
+          </button>
+        </div>
       </div>
     `;
   }).join('');
 
   board.querySelectorAll('button[data-id]').forEach(btn => {
-    btn.addEventListener('click', () => placeOrder(btn.dataset.id, btn));
+    btn.addEventListener('click', () => addItemToCart(btn.dataset.id, Number(btn.dataset.max), btn));
   });
+
+  updateCartBadge();
 }
 
-async function placeOrder(dailyMenuId, btn) {
+function addItemToCart(dailyMenuId, max, btn) {
   if (!me) {
     location.href = '/login.html';
     return;
   }
-  btn.disabled = true;
-  btn.textContent = 'Placing order…';
-  const res = await fetch('/api/orders', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ daily_menu_id: Number(dailyMenuId), quantity: 1 })
-  });
-  const data = await res.json();
+  const qtyInput = document.querySelector(`input[data-qty-for="${dailyMenuId}"]`);
+  let qty = parseInt(qtyInput.value, 10) || 1;
+  if (qty < 1) qty = 1;
+  if (qty > max) qty = max;
+
+  addToCart(dailyMenuId, qty);
+
   const msgArea = document.getElementById('msg-area');
-  if (res.ok) {
-    msgArea.innerHTML = `<div class="msg ok">Order placed. See you soon.</div>`;
-  } else {
-    msgArea.innerHTML = `<div class="msg error">${escapeHtml(data.error || 'Order failed')}</div>`;
-  }
-  loadMenu();
+  msgArea.innerHTML = `<div class="msg ok">Added to cart. <a href="/checkout.html" style="color:var(--brass);">View cart →</a></div>`;
 }
 
 function escapeHtml(str) {
