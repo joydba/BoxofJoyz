@@ -8,19 +8,32 @@ if (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN) {
 }
 
 async function notifyAdminWhatsApp(message) {
+  return sendWhatsApp(process.env.ADMIN_WHATSAPP_TO, message);
+}
+
+async function sendWhatsApp(to, message) {
   if (!client) {
-    console.log('[WhatsApp notify skipped - Twilio not configured]', message);
+    console.log('[WhatsApp notify skipped - Twilio not configured]', to, message);
     return;
   }
   try {
     await client.messages.create({
-      from: process.env.TWILIO_WHATSAPP_FROM, // e.g. 'whatsapp:+14155238886' (Twilio sandbox number)
-      to: process.env.ADMIN_WHATSAPP_TO,       // e.g. 'whatsapp:+919591611667'
+      from: process.env.TWILIO_WHATSAPP_FROM,
+      to,
       body: message
     });
   } catch (err) {
-    console.error('WhatsApp notify failed:', err.message);
+    console.error(`WhatsApp notify failed for ${to}:`, err.message);
   }
 }
 
-module.exports = { notifyAdminWhatsApp };
+// Sends the same message to a list of WhatsApp numbers (e.g. all users).
+// Sends one at a time with a short delay to stay well under Twilio's rate limits.
+async function broadcastWhatsApp(numbers, message) {
+  for (const number of numbers) {
+    await sendWhatsApp(number, message);
+    await new Promise(r => setTimeout(r, 300));
+  }
+}
+
+module.exports = { notifyAdminWhatsApp, sendWhatsApp, broadcastWhatsApp };
