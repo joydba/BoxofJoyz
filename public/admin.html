@@ -45,6 +45,11 @@
   </div>
 
   <div class="admin-form">
+    <h3 class="display" style="margin-top:0;">Today's live menu</h3>
+    <div id="today-menu-list"><p class="hint">Loading…</p></div>
+  </div>
+
+  <div class="admin-form">
     <h3 class="display" style="margin-top:0;">Put a dish on today's menu</h3>
     <form id="menu-form">
       <div>
@@ -66,6 +71,47 @@ async function loadMe() {
   const data = await res.json();
   if (!data.user || !data.user.isAdmin) { location.href = '/'; return; }
   document.getElementById('nav').innerHTML = `<a href="/">Menu</a><a href="/admin-users.html">Users & Activity</a>`;
+}
+
+async function loadTodayMenu() {
+  const res = await fetch('/api/admin/menu/today');
+  const data = await res.json();
+  const container = document.getElementById('today-menu-list');
+
+  if (!data.menu || data.menu.length === 0) {
+    container.innerHTML = '<p class="hint">Nothing posted yet today.</p>';
+    return;
+  }
+
+  container.innerHTML = `<ul class="order-list">${data.menu.map(item => {
+    const remaining = item.quantity_available - item.quantity_sold;
+    return `
+      <li>
+        <span>${escapeHtml(item.name)} — ${remaining} of ${item.quantity_available} left</span>
+        <a href="#" data-remove-menu="${item.id}" style="color:var(--rust);">Remove</a>
+      </li>
+    `;
+  }).join('')}</ul>`;
+
+  container.querySelectorAll('[data-remove-menu]').forEach(link => {
+    link.addEventListener('click', async (e) => {
+      e.preventDefault();
+      if (!confirm('Remove this dish from today\'s menu?')) return;
+      const id = link.dataset.removeMenu;
+      const res = await fetch(`/api/admin/menu/today/${id}`, { method: 'DELETE' });
+      const result = await res.json();
+      const msgArea = document.getElementById('msg-area');
+      if (res.ok) {
+        const note = result.method === 'marked_sold_out'
+          ? 'Removed from ordering (kept as sold out since it already has orders).'
+          : 'Removed from today\'s menu.';
+        msgArea.innerHTML = `<div class="msg ok">${note}</div>`;
+        loadTodayMenu();
+      } else {
+        msgArea.innerHTML = `<div class="msg error">${result.error}</div>`;
+      }
+    });
+  });
 }
 
 async function loadDishes() {
@@ -110,6 +156,7 @@ document.getElementById('menu-form').addEventListener('submit', async (e) => {
   const msgArea = document.getElementById('msg-area');
   if (res.ok) {
     msgArea.innerHTML = `<div class="msg ok">Posted to today's menu.</div>`;
+    loadTodayMenu();
   } else {
     msgArea.innerHTML = `<div class="msg error">${data.error}</div>`;
   }
@@ -121,7 +168,7 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
-loadMe().then(loadDishes);
+loadMe().then(() => { loadDishes(); loadTodayMenu(); });
 </script>
 </body>
 </html>
