@@ -214,6 +214,47 @@ app.get('/api/admin/activity', requireLogin, requireAdmin, async (req, res) => {
   res.json({ activity: result.rows });
 });
 
+// List what's currently on today's menu, for the admin panel
+app.get('/api/admin/menu/today', requireLogin, requireAdmin, async (req, res) => {
+  const result = await pool.query(
+    `SELECT dm.id, d.name, dm.quantity_available, dm.quantity_sold
+     FROM daily_menu dm
+     JOIN dishes d ON d.id = dm.dish_id
+     WHERE dm.menu_date = CURRENT_DATE
+     ORDER BY dm.id`
+  );
+  res.json({ menu: result.rows });
+});
+
+// Remove a dish from today's menu. If orders already exist against it,
+// we can't delete the row (order history references it), so instead we
+// mark it sold out — it disappears from ordering but past orders stay intact.
+app.delete('/api/admin/menu/today/:id', requireLogin, requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const deleteResult = await pool.query(
+      `DELETE FROM daily_menu WHERE id = $1 AND menu_date = CURRENT_DATE RETURNING id`,
+      [id]
+    );
+    if (deleteResult.rows.length > 0) {
+      return res.json({ removed: true, method: 'deleted' });
+    }
+    return res.status(404).json({ error: 'Not found on today\'s menu' });
+  } catch (err) {
+    if (err.code === '23503') {
+      // Foreign key violation - orders reference this item, so mark it
+      // sold out instead of deleting it.
+      await pool.query(
+        `UPDATE daily_menu SET quantity_available = quantity_sold WHERE id = $1 AND menu_date = CURRENT_DATE`,
+        [id]
+      );
+      return res.json({ removed: true, method: 'marked_sold_out' });
+    }
+    console.error(err);
+    res.status(500).json({ error: 'Could not remove item' });
+  }
+});
+
 // Set today's menu: max 2 dishes enforced here
 app.post('/api/admin/menu/today', requireLogin, requireAdmin, async (req, res) => {
   const { dish_id, quantity_available } = req.body;
