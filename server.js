@@ -4,7 +4,7 @@ const session = require('express-session');
 const bcrypt = require('bcryptjs');
 const path = require('path');
 const pool = require('./db');
-const { notifyAdminWhatsApp } = require('./notify');
+const { notifyAdminWhatsApp, broadcastWhatsApp } = require('./notify');
 
 const app = express();
 app.use(express.json());
@@ -232,6 +232,8 @@ app.post('/api/admin/menu/today', requireLogin, requireAdmin, async (req, res) =
       return res.status(400).json({ error: 'Only 2 dishes allowed per day' });
     }
 
+    const isNewToday = already.rows.length === 0;
+
     const result = await pool.query(
       `INSERT INTO daily_menu (menu_date, dish_id, quantity_available)
        VALUES (CURRENT_DATE, $1, $2)
@@ -241,6 +243,21 @@ app.post('/api/admin/menu/today', requireLogin, requireAdmin, async (req, res) =
       [dish_id, quantity_available]
     );
     res.json({ menuItem: result.rows[0] });
+
+    // Only notify on the first time this dish goes live today, not on every
+    // quantity edit — avoids spamming users if you tweak the number later.
+    if (isNewToday) {
+      const dishResult = await pool.query('SELECT name FROM dishes WHERE id = $1', [dish_id]);
+      const dishName = dishResult.rows[0]?.name || 'A dish';
+      const usersResult = await pool.query(
+        `SELECT phone FROM users WHERE phone IS NOT NULL AND phone <> ''`
+      );
+      const numbers = usersResult.rows.map(r => `whatsapp:${r.phone}`);
+      broadcastWhatsApp(
+        numbers,
+        `🍲 Today's JoyBox is live! "${dishName}" — ${quantity_available} available. Order now before it's gone: https://boxofjoyz.onrender.com`
+      );
+    }
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Could not update menu' });
